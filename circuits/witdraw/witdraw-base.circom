@@ -37,8 +37,8 @@ template Witdraw(n_levels) {
     signal private input path_indices[n_levels];
 
     // public inputs
-    signal input root;
-    signal input nullifier_hash;
+    signal output root;
+    signal output nullifier_hash;
 
     component note_commitment = CalculateCommitment();
     note_commitment.note_secret <== note_secret;
