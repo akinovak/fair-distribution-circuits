@@ -18,7 +18,10 @@
   },
   "homepage": "https://github.com/akinovak/fair-distribution-circuits#readme",
   "dependencies": {
-    "circomlib": "^0.5.4"
+    "bigint-conversion": "^2.1.12",
+    "circomlib": "^0.5.4",
+    "ffjavascript": "^0.2.38",
+    "semaphore-lib": "github:akinovak/semaphore-lib#dev"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
