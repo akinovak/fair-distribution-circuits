@@ -67,7 +67,7 @@ contract FairDistribution is Constants, Utils {
     }
 
     function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
-        external 
+        public 
     {
 
         require(!nullifierHashes[_nullifierHash], "Withdrawal: the note has been already spent");
