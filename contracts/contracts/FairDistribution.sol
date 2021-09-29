@@ -19,7 +19,7 @@ contract FairDistribution is Constants {
     mapping (uint256 => bool) public nullifierHashes;
     mapping (address => uint) public shares;
 
-    event Deposit(uint256 nullifier);
+    event Deposit(uint256 _nullifier);
 
     constructor(uint256 _deposit, uint8 rln_tree_levels, uint8 notes_tree_levels)
     {
@@ -81,16 +81,16 @@ contract FairDistribution is Constants {
         _;
     }
 
-    function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) 
+    function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier, uint256 _leaf) 
         public 
         payable 
         isDepositSatisfied()
         isValidRlnProof(_proof, _commitment, _y, _root, _nullifier, _epoch, _rlnIdentifier)
         returns (uint256)
     {
-        uint256 leaf = notesTree.insertLeaf(_commitment);
-        emit Deposit(_nullifier);
-        return leaf;
+        uint256 leaf1 = notesTree.insertLeaf(_leaf);
+        // emit Deposit(_nullifier);
+        return leaf1;
     }
 
     function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
