@@ -36,7 +36,7 @@ template Witdraw(n_levels) {
     signal private input path_elements[n_levels][LEAVES_PER_PATH_LEVEL];
     signal private input path_indices[n_levels];
 
-    // public inputs
+    //outputs
     signal output root;
     signal output nullifier_hash;
 
@@ -44,7 +44,7 @@ template Witdraw(n_levels) {
     note_commitment.note_secret <== note_secret;
     note_commitment.nullifier <== nullifier;
 
-        //begin tree
+    //begin tree
     var i;
     var j;
     component inclusionProof = MerkleTreeInclusionProof(n_levels);
