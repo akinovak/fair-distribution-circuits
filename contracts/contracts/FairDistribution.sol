@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { IncrementalQuinTree } from "./IncrementalMerkleTree.sol";
-import { RLNVerifier } from "./RLNVerifier.sol";
+import { Verifier } from "./RLNVerifier.sol";
 import { WithdrawVerifier } from "./WithdrawVerifier.sol";
 import { Constants } from "./Constants.sol";
 import { Utils } from "./Utils.sol";
@@ -11,10 +11,10 @@ contract FairDistribution is Constants, Utils {
 
     uint256 public immutable DEPOSIT;
 
-    IncrementalQuinTree private participantsTree;
-    IncrementalQuinTree private notesTree;
+    IncrementalQuinTree public participantsTree;
+    IncrementalQuinTree public notesTree;
 
-    RLNVerifier private rlnVerifier;
+    Verifier private rlnVerifier;
     WithdrawVerifier private withdrawVerifier;
 
     mapping (uint256 => bool) public nullifierHashes;
@@ -28,7 +28,7 @@ contract FairDistribution is Constants, Utils {
         participantsTree = new IncrementalQuinTree(rln_tree_levels, RLN_ZERO_VALUE);
         notesTree = new IncrementalQuinTree(notes_tree_levels, NOTES_ZERO_VALUE);
 
-        rlnVerifier = new RLNVerifier();
+        rlnVerifier = new Verifier();
         withdrawVerifier = new WithdrawVerifier();
     }
 
@@ -64,6 +64,10 @@ contract FairDistribution is Constants, Utils {
         uint256 leaf = notesTree.insertLeaf(_commitment);
         emit Deposit(_nullifier);
         return leaf;
+    }
+
+    function getRoot() public view returns (uint256) {
+        return participantsTree.root();
     }
 
     function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
