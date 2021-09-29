@@ -5,8 +5,9 @@ import { IncrementalQuinTree } from "./IncrementalMerkleTree.sol";
 import { RLNVerifier } from "./RLNVerifier.sol";
 import { WithdrawVerifier } from "./WithdrawVerifier.sol";
 import { Constants } from "./Constants.sol";
+import { Utils } from "./Utils.sol";
 
-contract FairDistribution is Constants {
+contract FairDistribution is Constants, Utils {
 
     uint256 public immutable DEPOSIT;
 
@@ -19,7 +20,7 @@ contract FairDistribution is Constants {
     mapping (uint256 => bool) public nullifierHashes;
     mapping (address => uint) public shares;
 
-    event Deposit(uint256 _nullifier);
+    event Deposit(uint256 nullifier);
 
     constructor(uint256 _deposit, uint8 rln_tree_levels, uint8 notes_tree_levels)
     {
@@ -33,7 +34,6 @@ contract FairDistribution is Constants {
 
     function insertIdentity(uint256 _identityCommitment) public
         returns (uint256) {
-        // Ensure that the given identity commitment is not the zero value
         require(
             _identityCommitment != RLN_ZERO_VALUE,
             "RLN: identity commitment cannot be the zero-value"
@@ -42,7 +42,12 @@ contract FairDistribution is Constants {
         return participantsTree.insertLeaf(_identityCommitment);
     }
 
-    modifier isValidRlnProof(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) {
+    function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) 
+        public 
+        payable 
+        returns (uint256)
+    {
+        require(msg.value == DEPOSIT, "RLN: deposit not satisfied!");
         require(participantsTree.rootHistory(_root) == true, "RLN: no root");
 
         uint256[6] memory publicSignals =
@@ -56,19 +61,19 @@ contract FairDistribution is Constants {
             "RLN: invalid proof"
         );   
 
-        _;
+        uint256 leaf = notesTree.insertLeaf(_commitment);
+        emit Deposit(_nullifier);
+        return leaf;
     }
 
-    modifier isDepositSatisfied() {
-        require(msg.value == DEPOSIT, "RLN: deposit not satisfied!");
-        _;
-    }
+    function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
+        external 
+    {
 
-    modifier isValidWithdrawProof(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash) {
         require(!nullifierHashes[_nullifierHash], "Withdrawal: the note has been already spent");
         require(notesTree.rootHistory(_root) == true, "Withdrawal: no root");
 
-        uint256[2] memory publicSignals = [ _root, _nullifierHash];         
+        uint256[2] memory publicSignals = [_root, _nullifierHash];         
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) =
             unpackProof(_proof);
@@ -78,65 +83,11 @@ contract FairDistribution is Constants {
             "Withdrawal: invalid proof"
         );   
 
-        _;
-    }
-
-    function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier, uint256 _leaf) 
-        public 
-        payable 
-        isDepositSatisfied()
-        isValidRlnProof(_proof, _commitment, _y, _root, _nullifier, _epoch, _rlnIdentifier)
-        returns (uint256)
-    {
-        uint256 leaf1 = notesTree.insertLeaf(_leaf);
-        // emit Deposit(_nullifier);
-        return leaf1;
-    }
-
-    function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
-        isValidWithdrawProof(_proof, _root, _nullifierHash)
-        external 
-    {
         nullifierHashes[_nullifierHash] = true;
         shares[_recipient] = shares[_recipient] + 1; 
     }
 
     //TODO add slash function
-
-    function packProof (
-        uint256[2] memory _a,
-        uint256[2][2] memory _b,
-        uint256[2] memory _c
-    ) public pure returns (uint256[8] memory) {
-
-        return [
-            _a[0],
-            _a[1], 
-            _b[0][0],
-            _b[0][1],
-            _b[1][0],
-            _b[1][1],
-            _c[0],
-            _c[1]
-        ];
-    }
-
-    function unpackProof(
-        uint256[8] memory _proof
-    ) public pure returns (
-        uint256[2] memory,
-        uint256[2][2] memory,
-        uint256[2] memory
-    ) {
-
-        return (
-            [_proof[0], _proof[1]],
-            [
-                [_proof[2], _proof[3]],
-                [_proof[4], _proof[5]]
-            ],
-            [_proof[6], _proof[7]]
-        );
-    }
+    //TODO snark field checks
 
 }
