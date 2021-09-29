@@ -6,12 +6,15 @@ import { RLNVerifier } from "./RLNVerifier.sol";
 import { WithdrawVerifier } from "./WithdrawVerifier.sol";
 import { Constants } from "./Constants.sol";
 
-contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
+contract FairDistribution is Constants {
 
     uint256 public immutable DEPOSIT;
 
     IncrementalQuinTree private participantsTree;
     IncrementalQuinTree private notesTree;
+
+    RLNVerifier private rlnVerifier;
+    WithdrawVerifier private withdrawVerifier;
 
     mapping (uint256 => bool) public nullifierHashes;
     mapping (address => uint) public shares;
@@ -23,6 +26,9 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
         DEPOSIT = _deposit;
         participantsTree = new IncrementalQuinTree(rln_tree_levels, RLN_ZERO_VALUE);
         notesTree = new IncrementalQuinTree(notes_tree_levels, NOTES_ZERO_VALUE);
+
+        rlnVerifier = new RLNVerifier();
+        withdrawVerifier = new WithdrawVerifier();
     }
 
     function insertIdentity(uint256 _identityCommitment) public
@@ -37,6 +43,8 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
     }
 
     modifier isValidRlnProof(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) {
+        require(participantsTree.rootHistory(_root) == true, "RLN: no root");
+
         uint256[6] memory publicSignals =
             [_y, _root, _nullifier, _commitment, _epoch, _rlnIdentifier];         
 
@@ -44,15 +52,10 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
             unpackProof(_proof);
 
         require(
-            verifyProofRLN(a, b, c, publicSignals),
+            rlnVerifier.verifyProof(a, b, c, publicSignals),
             "RLN: invalid proof"
         );   
 
-        _;
-    }
-
-    modifier doesRootExists(mapping (uint256 => bool) storage rootHistory, uint256 _root) {
-        require(rootHistory[_root], "Root not seen");
         _;
     }
 
@@ -63,7 +66,7 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
 
     modifier isValidWithdrawProof(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash) {
         require(!nullifierHashes[_nullifierHash], "Withdrawal: the note has been already spent");
-        require(notesTree.rootHistory[_root] == true, "Withdrawal: no root");
+        require(notesTree.rootHistory(_root) == true, "Withdrawal: no root");
 
         uint256[2] memory publicSignals = [ _root, _nullifierHash];         
 
@@ -71,7 +74,7 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
             unpackProof(_proof);
 
         require(
-            verifyProofWithdraw(a, b, c, publicSignals),
+            withdrawVerifier.verifyProof(a, b, c, publicSignals),
             "Withdrawal: invalid proof"
         );   
 
@@ -80,17 +83,18 @@ contract FairDistribution is RLNVerifier, WithdrawVerifier, Constants {
 
     function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) 
         public 
+        payable 
         isDepositSatisfied()
-        doesRootExists(participantsTree.rootHistory, _root)
         isValidRlnProof(_proof, _commitment, _y, _root, _nullifier, _epoch, _rlnIdentifier)
         returns (uint256)
     {
-        return notesTree.insertLeaf(_commitment);
+        uint256 leaf = notesTree.insertLeaf(_commitment);
         emit Deposit(_nullifier);
+        return leaf;
     }
 
-    function withdraw(uint256 _root, uint256 _nullifierHash, address _recipient) 
-        isValidWithdrawProof(_root, _nullifierHash)
+    function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
+        isValidWithdrawProof(_proof, _root, _nullifierHash)
         external 
     {
         nullifierHashes[_nullifierHash] = true;

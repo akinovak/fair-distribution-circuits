@@ -237,7 +237,7 @@ contract WithdrawVerifier {
         return 0;
     }
     /// @return r  bool true if proof is valid
-    function verifyProofWithdraw(
+    function verifyProof(
             uint[2] memory a,
             uint[2][2] memory b,
             uint[2] memory c,
