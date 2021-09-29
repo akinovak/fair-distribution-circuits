@@ -24,7 +24,7 @@ template CalculateNullifierHash() {
 }
 
 
-template Witdraw(n_levels) {
+template Withdraw(n_levels) {
 
     //constants
     var LEAVES_PER_NODE = 2;
