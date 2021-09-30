@@ -98,7 +98,36 @@ describe("FairDistribution", function () {
             solidityProof.c,
         );
 
-        await fairDistribution.deposit(packedProof, signalHash, y, root, nullifier, epoch, rlnIdentifier, { value: "1" });
+        let leaf = await fairDistribution.deposit(packedProof, noteCommitmnet, ethers.utils.hexlify(ethers.utils.toUtf8Bytes(signal)), y, root, nullifier, epoch, rlnIdentifier, { value: "1" });
+
+        const notesTree = RLN.createTree(20, NOTES_ZERO_VALUE, 2);
+        // if verification was ok, add note_commitment to tree and try to withdraw it
+        if(leaf) {
+            console.log('DEPOSIT WAS SUCCESSFUL');
+            const withdrawalVkeyPath = path.join('./w-zkeyFiles', 'verification_key.json');
+            const withdrawalVKey = JSON.parse(fs.readFileSync(withdrawalVkeyPath, 'utf-8'));
+        
+            const withdrawalWasmFilePath = path.join('./w-zkeyFiles', 'withdraw.wasm');
+            const withdrawalFinalZkeyPath = path.join('./w-zkeyFiles', 'withdraw_final.zkey');
+    
+            notesTree.insert(noteCommitmnet);
+            
+            const withdrawalMerkleProof = notesTree.genMerklePath(0);
+            const fullProofW = await Withdraw.genProofFromBuiltTree(noteSecret, noteNullifier, withdrawalMerkleProof, withdrawalWasmFilePath, withdrawalFinalZkeyPath);
+        
+            const [owner, addr1] = await ethers.getSigners();
+    
+            const WsolidityProof = RLN.packToSolidityProof(fullProofW);
+
+            const WpackedProof = await fairDistribution.packProof(
+                WsolidityProof.a, 
+                WsolidityProof.b, 
+                WsolidityProof.c,
+            );
+    
+            await fairDistribution.withdraw(WpackedProof, notesTree.root, noteNullifierHash, addr1.address);
+
+        }
 
   });
 });

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 import { IncrementalQuinTree } from "./IncrementalMerkleTree.sol";
-import { Verifier } from "./RLNVerifier.sol";
-import { WithdrawVerifier } from "./WithdrawVerifier.sol";
+import { Verifier as RLNVerifier } from "./RLNVerifier.sol";
+import { Verifier as WithdrawVerifier } from "./WithdrawVerifier.sol";
 import { Constants } from "./Constants.sol";
 import { Utils } from "./Utils.sol";
 
@@ -14,7 +14,7 @@ contract FairDistribution is Constants, Utils {
     IncrementalQuinTree public participantsTree;
     IncrementalQuinTree public notesTree;
 
-    Verifier private rlnVerifier;
+    RLNVerifier private rlnVerifier;
     WithdrawVerifier private withdrawVerifier;
 
     mapping (uint256 => bool) public nullifierHashes;
@@ -28,7 +28,7 @@ contract FairDistribution is Constants, Utils {
         participantsTree = new IncrementalQuinTree(rln_tree_levels, RLN_ZERO_VALUE);
         notesTree = new IncrementalQuinTree(notes_tree_levels, NOTES_ZERO_VALUE);
 
-        rlnVerifier = new Verifier();
+        rlnVerifier = new RLNVerifier();
         withdrawVerifier = new WithdrawVerifier();
     }
 
@@ -42,7 +42,11 @@ contract FairDistribution is Constants, Utils {
         return participantsTree.insertLeaf(_identityCommitment);
     }
 
-    function deposit(uint256[8] memory _proof, uint256 _commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) 
+    function getRoot() public view returns (uint256) {
+        return notesTree.root();
+    }
+
+    function deposit(uint256[8] memory _proof, uint256 _commitment, bytes memory _hexified_commitment, uint256 _y, uint256 _root, uint256 _nullifier, uint256 _epoch, uint256 _rlnIdentifier) 
         public 
         payable 
         returns (uint256)
@@ -51,7 +55,7 @@ contract FairDistribution is Constants, Utils {
         require(participantsTree.rootHistory(_root) == true, "RLN: no root");
 
         uint256[6] memory publicSignals =
-            [_y, _root, _nullifier, _commitment, _epoch, _rlnIdentifier];         
+            [_y, _root, _nullifier, hashSignal(_hexified_commitment), _epoch, _rlnIdentifier];         
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) =
             unpackProof(_proof);
@@ -64,10 +68,6 @@ contract FairDistribution is Constants, Utils {
         uint256 leaf = notesTree.insertLeaf(_commitment);
         emit Deposit(_nullifier);
         return leaf;
-    }
-
-    function getRoot() public view returns (uint256) {
-        return participantsTree.root();
     }
 
     function withdraw(uint256[8] memory _proof, uint256 _root, uint256 _nullifierHash, address _recipient) 
@@ -89,6 +89,10 @@ contract FairDistribution is Constants, Utils {
 
         nullifierHashes[_nullifierHash] = true;
         shares[_recipient] = shares[_recipient] + 1; 
+    }
+
+    function hashSignal(bytes memory _signal) internal pure returns (uint256) {
+        return uint256(keccak256(_signal)) >> 8;
     }
 
     //TODO add slash function
