@@ -126,7 +126,9 @@ describe("FairDistribution", function () {
             );
     
             await fairDistribution.withdraw(WpackedProof, notesTree.root, noteNullifierHash, addr1.address);
+            const shares = await fairDistribution.shares(addr1.address);
 
+            console.log(shares);
         }
 
   });
