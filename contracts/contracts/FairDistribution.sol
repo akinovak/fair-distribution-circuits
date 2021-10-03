@@ -27,11 +27,12 @@ contract FairDistribution is Constants, Utils, Ownable {
 
     // event Deposit(uint256 nullifier);
 
-    constructor(uint256 _deposit, uint8 _limit, uint8 semaphore_tree_levels, uint8 notes_tree_levels)
+    constructor(uint256 _deposit, uint8 _limit, uint8 semaphore_tree_levels, uint8 notes_tree_levels, uint256 _inital_epoch)
         Ownable()
     {
         DEPOSIT = _deposit;
         LIMIT = _limit;
+        CURRENT_EPOCH = _inital_epoch;
 
         participantsTree = new IncrementalQuinTree(semaphore_tree_levels, SEMAPHORE_ZERO_VALUE);
         notesTree = new IncrementalQuinTree(notes_tree_levels, NOTES_ZERO_VALUE);
