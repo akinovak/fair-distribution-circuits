@@ -55,6 +55,10 @@ contract FairDistribution is Constants, Utils, Ownable {
         return notesTree.root();
     }
 
+    function getValueAtMapping(uint256 nullifierHash)  public view returns(bool) {
+      return nullifierHashes[nullifierHash];
+    }
+
     function setCurrentEpoch(uint256 _epoch) public onlyOwner {
         CURRENT_EPOCH = _epoch;
     }
@@ -79,6 +83,7 @@ contract FairDistribution is Constants, Utils, Ownable {
             "Semaphore: invalid proof"
         );   
 
+        numOfDeposits[_nullifiersHash] = numOfDeposits[_nullifiersHash] + 1;
         uint256 leaf = notesTree.insertLeaf(_commitment);
         return leaf;
     }
@@ -87,7 +92,7 @@ contract FairDistribution is Constants, Utils, Ownable {
         public 
     {
 
-        require(nullifierHashes[_nullifierHash], "Withdrawal: the note has been already spent");
+        require(!nullifierHashes[_nullifierHash], "Withdrawal: the note has been already spent");
         require(notesTree.rootHistory(_root) == true, "Withdrawal: no root");
 
         uint256[2] memory publicSignals = [_root, _nullifierHash];         

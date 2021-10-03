@@ -9,10 +9,10 @@ const poseidonGenContract = require('circomlib/src/poseidon_gencontract.js');
 const circomlib = require('circomlib');
 const bigintConversion = require('bigint-conversion');
 
-const { RLN, Withdraw } = require('semaphore-lib');
+const { FastSemaphore, Withdraw } = require('semaphore-lib');
 
-const RLN_ZERO_VALUE = BigInt(ethers.utils.solidityKeccak256(['bytes'], [ethers.utils.toUtf8Bytes('RLN')])) % SNARK_FIELD_SIZE;
-const NOTES_ZERO_VALUE = BigInt(ethers.utils.solidityKeccak256(['bytes'], [ethers.utils.toUtf8Bytes('FAIR')])) % SNARK_FIELD_SIZE;
+const SEMAPHORE_ZERO_VALUE = BigInt(ethers.utils.solidityKeccak256(['bytes'], [ethers.utils.toUtf8Bytes('SEMAPHORE')])) % SNARK_FIELD_SIZE;
+const NOTES_ZERO_VALUE = BigInt(ethers.utils.solidityKeccak256(['bytes'], [ethers.utils.toUtf8Bytes('NOTES')])) % SNARK_FIELD_SIZE;
 
 describe("FairDistribution", function () {
   it("Should test full deposit and withdrawal pipeline", async function () {
@@ -39,92 +39,98 @@ describe("FairDistribution", function () {
             }
         });
 
-        const fairDistribution = await FairDistribution.deploy(1, 15, 20);
+        //deposit, limit, semaphore_tree_levels, notes_tree_levels, _inital_epoch
+        FastSemaphore.setHasher('poseidon');
+        const initialEpoch = FastSemaphore.genExternalNullifier('initial-epoch');
+        const fairDistribution = await FairDistribution.deploy(1, 3, 20, 20, initialEpoch);
         await fairDistribution.deployed();
 
-        RLN.setHasher('poseidon');
-        const identity = RLN.genIdentity();
-        const identitySecret = RLN.calculateIdentitySecret(identity);
-    
+        const identity = FastSemaphore.genIdentity();
+        const identityCommitment = FastSemaphore.genIdentityCommitment(identity);
+
         const leafIndex = 3;
         const idCommitments = [];
-    
+
         for (let i=0; i<leafIndex;i++) {
-          const tmpIdentity = RLN.genIdentity();
-          const tmpSecret = RLN.calculateIdentitySecret(tmpIdentity);
-          const tmpCommitment = RLN.genIdentityCommitment(tmpSecret);
+          const tmpIdentity = FastSemaphore.genIdentity();
+          const tmpCommitment = FastSemaphore.genIdentityCommitment(tmpIdentity);
           idCommitments.push(tmpCommitment);
         }
 
         const promises = idCommitments.map(async (id) => {
             const index = await fairDistribution.insertIdentity(id);
             return index;
-          });
+        });
     
         await Promise.all(promises);
+        idCommitments.push(identityCommitment);
     
-        idCommitments.push(RLN.genIdentityCommitment(identitySecret));
-        await fairDistribution.insertIdentity(RLN.genIdentityCommitment(identitySecret));
+        await fairDistribution.insertIdentity(identityCommitment);
     
         const noteSecret = Fq.random();
         const noteNullifier = Fq.random();
     
-        const noteCommitmnet = circomlib.poseidon([noteSecret, noteNullifier]);
+        let noteCommitmnet = circomlib.poseidon([noteSecret, noteNullifier]);
+        noteCommitmnet = `0x${bigintConversion.bigintToHex(noteCommitmnet)}`;
         const noteNullifierHash = Withdraw.genNullifierHash(noteNullifier);
-    
-        const signal = bigintConversion.bigintToText(noteCommitmnet);
-        const signalHash = RLN.genSignalHash(signal);
-        const epoch = RLN.genExternalNullifier('test-epoch');
-    
-        const rlnIdentifier = RLN.genIdentifier();
-    
-        const wasmFilePath = path.join('./rln-zkeyFiles', 'rln.wasm');
-        const finalZkeyPath = path.join('./rln-zkeyFiles', 'rln_final.zkey');
-    
-        const witnessData = await RLN.genProofFromIdentityCommitments(identitySecret, epoch, signal, wasmFilePath, finalZkeyPath, idCommitments, 15, RLN_ZERO_VALUE, 2, rlnIdentifier);
-    
-        const a1 = RLN.calculateA1(identitySecret, epoch, rlnIdentifier);
-        const y = RLN.calculateY(a1, identitySecret, signalHash);
-        const nullifier = RLN.genNullifier(a1, rlnIdentifier);
-    
-        const pubSignals = [y, witnessData.root, nullifier, signalHash, epoch, rlnIdentifier];
 
+        const wasmFilePath = path.join('./semaphore-zkeyFiles', 'semaphore.wasm');
+        const finalZkeyPath = path.join('./semaphore-zkeyFiles', 'semaphore_final.zkey');
+    
+        const witnessData = await FastSemaphore.genProofFromIdentityCommitments(identity, initialEpoch, noteCommitmnet, wasmFilePath, finalZkeyPath, idCommitments, 20, SEMAPHORE_ZERO_VALUE, 2, false);
+        
         const { fullProof, root } = witnessData;
-        const solidityProof = RLN.packToSolidityProof(fullProof);
-
+        const solidityProof = FastSemaphore.packToSolidityProof(fullProof);
+        
         const packedProof = await fairDistribution.packProof(
             solidityProof.a, 
             solidityProof.b, 
             solidityProof.c,
         );
 
-        let leaf = await fairDistribution.deposit(packedProof, noteCommitmnet, ethers.utils.hexlify(ethers.utils.toUtf8Bytes(signal)), y, root, nullifier, epoch, rlnIdentifier, { value: "1" });
+        const nullifierHash = FastSemaphore.genNullifierHash(initialEpoch, identity.identityNullifier, 20);
+        
+        let leaf = await fairDistribution.deposit(packedProof, bigintConversion.hexToBigint(noteCommitmnet.slice(2)), root, nullifierHash, { value: "1" });
 
-        const notesTree = RLN.createTree(20, NOTES_ZERO_VALUE, 2);
         // if verification was ok, add note_commitment to tree and try to withdraw it
         if(leaf) {
             console.log('DEPOSIT WAS SUCCESSFUL');
+            const notesTree = FastSemaphore.createTree(20, NOTES_ZERO_VALUE, 2);
             const withdrawalVkeyPath = path.join('./w-zkeyFiles', 'verification_key.json');
             const withdrawalVKey = JSON.parse(fs.readFileSync(withdrawalVkeyPath, 'utf-8'));
         
             const withdrawalWasmFilePath = path.join('./w-zkeyFiles', 'withdraw.wasm');
             const withdrawalFinalZkeyPath = path.join('./w-zkeyFiles', 'withdraw_final.zkey');
-    
-            notesTree.insert(noteCommitmnet);
-            
+        
+            notesTree.insert(bigintConversion.hexToBigint(noteCommitmnet.slice(2)));
+        
             const withdrawalMerkleProof = notesTree.genMerklePath(0);
+
+            console.log(notesTree.root);
+            const rawRoot = await fairDistribution.getRoot();
+            console.log(bigintConversion.hexToBigint(rawRoot._hex.slice(2)))
+
             const fullProofW = await Withdraw.genProofFromBuiltTree(noteSecret, noteNullifier, withdrawalMerkleProof, withdrawalWasmFilePath, withdrawalFinalZkeyPath);
         
+            const pubSignals = [notesTree.root, noteNullifierHash];
+        
+            const withdrawalRes = await Withdraw.verifyProof(withdrawalVKey, { proof: fullProofW.proof, publicSignals: pubSignals })
+            if (withdrawalRes === true) {
+                console.log("Withdrawal verification OK");
+            } else {
+                console.log("Withdrawal invalid proof");
+            }
+
             const [owner, addr1] = await ethers.getSigners();
-    
-            const WsolidityProof = RLN.packToSolidityProof(fullProofW);
+
+            const WsolidityProof = FastSemaphore.packToSolidityProof(fullProofW);
 
             const WpackedProof = await fairDistribution.packProof(
                 WsolidityProof.a, 
                 WsolidityProof.b, 
                 WsolidityProof.c,
             );
-    
+
             await fairDistribution.withdraw(WpackedProof, notesTree.root, noteNullifierHash, addr1.address);
             const shares = await fairDistribution.shares(addr1.address);
 
